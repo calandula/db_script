@@ -1,15 +1,18 @@
-pub mod config;
-
+use tokio;
 use mongodb::IndexModel;
 use mongodb::{Client, options::ClientOptions};
 use mongodb::bson::{doc, Document};
-use tokio;
 use envy;
 use config::Configuration;
+use std::process;
+pub mod config;
 
 async fn create_materialized_view() {
     let conf = envy::from_env::<Configuration>().unwrap();
-    let mut client_options = ClientOptions::parse(&conf.db_path).await.expect("Client error");
+    let mut client_options = ClientOptions::parse(&conf.db_path).await.unwrap_or_else(|_| {
+        eprintln!("Error with init client");
+        process::exit(1)
+    });
     client_options.app_name = Some(conf.app_name);
     let client = Client::with_options(client_options).unwrap();
     let db = client.database(&conf.db_name.as_str());
@@ -69,7 +72,10 @@ async fn create_materialized_view() {
     app_col
         .aggregate(pipeline, None)
         .await
-        .expect("Aggregation error");
+        .unwrap_or_else(|_| {
+            eprintln!("Error with mat view creation");
+            process::exit(1)
+        });
 
     let mat_view = db.collection::<Document>(&conf.view_name);
 
@@ -80,7 +86,13 @@ async fn create_materialized_view() {
             .build()
         ], None)
         .await
-        .expect("Index creation error");
+        .unwrap_or_else(|_| {
+            eprintln!("Error with index creation");
+            process::exit(1)
+        });
+
+    
+println!("Materialized View created and indexed successfully!");
 
 }
 
